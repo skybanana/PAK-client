@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+package echo;
+
+/**
+스켈레톤 코드를 작성하기 위한 간단한 에코 서버 프로토콜
+*/
+service EchoService {
+    // 받은 문자열을 반환
+    rpc Echo (EchoRequest) returns (EchoReply);
+}
+
+// The request message
+message EchoRequest {
+  string message = 1;
+}
+
+// The response message
+message EchoReply {
+  string message = 1;
+}

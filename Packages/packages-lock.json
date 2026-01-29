@@ -1,5 +1,12 @@
 {
   "dependencies": {
+    "com.cysharp.yetanotherhttphandler": {
+      "version": "https://github.com/Cysharp/YetAnotherHttpHandler.git?path=src/YetAnotherHttpHandler#1.8.0",
+      "depth": 0,
+      "source": "git",
+      "dependencies": {},
+      "hash": "be5165a3f2e904f28c2ed0686afa6440502a170a"
+    },
     "com.gamelovers.mcp-unity": {
       "version": "https://github.com/CoderGamester/mcp-unity.git",
       "depth": 0,

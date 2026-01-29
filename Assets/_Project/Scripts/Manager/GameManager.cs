@@ -10,8 +10,27 @@ public class GameManager : MonoBehaviour
     [SerializeField] private string helloMessage = "Hello";
     [SerializeField] private bool connectOnStart = true;
     [SerializeField] private bool logConnectionResult = true;
+    [SerializeField] private bool logEchoReply = true;
     private bool isSending;
     private bool hasLoggedConnection;
+    private string lastEchoMessage;
+
+    private void OnEnable()
+    {
+        ResolveTcpSocketManager();
+        if (tcpSocketManager != null)
+        {
+            tcpSocketManager.OnEchoReceived += HandleEchoReceived;
+        }
+    }
+
+    private void OnDisable()
+    {
+        if (tcpSocketManager != null)
+        {
+            tcpSocketManager.OnEchoReceived -= HandleEchoReceived;
+        }
+    }
 
     private async void Start()
     {
@@ -100,6 +119,15 @@ public class GameManager : MonoBehaviour
     public void SendHello()
     {
         _ = SendHelloAsync();
+    }
+
+    private void HandleEchoReceived(string message)
+    {
+        lastEchoMessage = message;
+        if (logEchoReply)
+        {
+            Debug.Log($"Echo reply received: {message}");
+        }
     }
 
 #if ENABLE_INPUT_SYSTEM

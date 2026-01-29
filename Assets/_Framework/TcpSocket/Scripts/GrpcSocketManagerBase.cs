@@ -1,9 +1,8 @@
 using System;
-using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
+using Cysharp.Net.Http;
 using Grpc.Net.Client;
-using Grpc.Net.Client.Web;
 using UnityEngine;
 using UnityEngine.Events;
 
@@ -13,14 +12,14 @@ public abstract class GrpcSocketManagerBase : MonoBehaviour
     public int port = 50051;
     public bool useTls = true;
     public string addressOverride = "";
-    public GrpcWebMode grpcWebMode = GrpcWebMode.GrpcWeb;
-    public bool allowInsecureCertificatesInEditor = false;
+    public bool http2OnlyForCleartext = true;
+    public bool skipCertificateVerificationInEditor = false;
 
     public int sequenceNumber = 1;
     public bool isConnected;
     protected GrpcChannel Channel { get; private set; }
 
-    private HttpClient httpClient;
+    private YetAnotherHttpHandler httpHandler;
     private CancellationTokenSource connectCts;
 
     public GrpcSocketManagerBase Init(string ip, int port)
@@ -41,10 +40,11 @@ public abstract class GrpcSocketManagerBase : MonoBehaviour
         var address = BuildAddress();
         connectCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
 
-        httpClient = CreateHttpClient();
+        httpHandler = CreateHttpHandler();
         Channel = GrpcChannel.ForAddress(address, new GrpcChannelOptions
         {
-            HttpClient = httpClient
+            HttpHandler = httpHandler,
+            DisposeHttpClient = true
         });
 
         isConnected = true;
@@ -54,17 +54,23 @@ public abstract class GrpcSocketManagerBase : MonoBehaviour
         return true;
     }
 
-    protected virtual HttpClient CreateHttpClient()
+    protected virtual YetAnotherHttpHandler CreateHttpHandler()
     {
-        var httpHandler = new HttpClientHandler();
-#if UNITY_EDITOR
-        if (allowInsecureCertificatesInEditor)
+        var handler = new YetAnotherHttpHandler();
+
+        if (!useTls && http2OnlyForCleartext)
         {
-            httpHandler.ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator;
+            handler.Http2Only = true;
+        }
+
+#if UNITY_EDITOR
+        if (skipCertificateVerificationInEditor)
+        {
+            handler.SkipCertificateVerification = true;
         }
 #endif
-        var grpcWebHandler = new GrpcWebHandler(grpcWebMode, httpHandler);
-        return new HttpClient(grpcWebHandler);
+
+        return handler;
     }
 
     protected virtual Task OnConnectedAsync(CancellationToken cancellationToken) => Task.CompletedTask;
@@ -95,8 +101,8 @@ public abstract class GrpcSocketManagerBase : MonoBehaviour
         Channel?.Dispose();
         Channel = null;
 
-        httpClient?.Dispose();
-        httpClient = null;
+        httpHandler?.Dispose();
+        httpHandler = null;
 
         await OnDisconnectedAsync(isReconnect);
     }
@@ -107,7 +113,7 @@ public abstract class GrpcSocketManagerBase : MonoBehaviour
     {
         if (!isConnected || Channel == null)
         {
-            throw new InvalidOperationException("gRPC-Web channel is not connected. Call Connect() first.");
+            throw new InvalidOperationException("gRPC channel is not connected. Call Connect() first.");
         }
     }
 

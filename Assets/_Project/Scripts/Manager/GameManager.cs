@@ -7,20 +7,29 @@ using UnityEngine.InputSystem;
 public class GameManager : MonoBehaviour
 {
     [SerializeField] private TcpSocketManager tcpSocketManager;
+    [SerializeField] private UDPSocketManager udpSocketManager;
     [SerializeField] private string helloMessage = "Hello";
     [SerializeField] private bool connectOnStart = true;
     [SerializeField] private bool logConnectionResult = true;
     [SerializeField] private bool logEchoReply = true;
+    [SerializeField] private bool logUdpEchoReply = true;
     private bool isSending;
     private bool hasLoggedConnection;
+    private bool hasLoggedUdpConnection;
     private string lastEchoMessage;
+    private string lastUdpEchoMessage;
 
     private void OnEnable()
     {
         ResolveTcpSocketManager();
+        ResolveUdpSocketManager();
         if (tcpSocketManager != null)
         {
             tcpSocketManager.OnEchoReceived += HandleEchoReceived;
+        }
+        if (udpSocketManager != null)
+        {
+            udpSocketManager.OnEchoReceived += HandleUdpEchoReceived;
         }
     }
 
@@ -30,15 +39,21 @@ public class GameManager : MonoBehaviour
         {
             tcpSocketManager.OnEchoReceived -= HandleEchoReceived;
         }
+        if (udpSocketManager != null)
+        {
+            udpSocketManager.OnEchoReceived -= HandleUdpEchoReceived;
+        }
     }
 
     private async void Start()
     {
         ResolveTcpSocketManager();
+        ResolveUdpSocketManager();
 
         if (connectOnStart)
         {
             await EnsureConnectedAsync();
+            await EnsureUdpConnectedAsync();
         }
     }
 
@@ -56,6 +71,14 @@ public class GameManager : MonoBehaviour
         if (tcpSocketManager == null)
         {
             tcpSocketManager = FindObjectOfType<TcpSocketManager>();
+        }
+    }
+
+    private void ResolveUdpSocketManager()
+    {
+        if (udpSocketManager == null)
+        {
+            udpSocketManager = FindObjectOfType<UDPSocketManager>();
         }
     }
 
@@ -97,6 +120,44 @@ public class GameManager : MonoBehaviour
         return tcpSocketManager.isConnected;
     }
 
+    private async Task<bool> EnsureUdpConnectedAsync()
+    {
+        if (udpSocketManager == null)
+        {
+            Debug.LogError("UDPSocketManager not found. Ensure DontDestroy scene is loaded.");
+            return false;
+        }
+
+        if (!udpSocketManager.isConnected)
+        {
+            try
+            {
+                var connected = await udpSocketManager.Connect();
+                if (connected && logConnectionResult && !hasLoggedUdpConnection)
+                {
+                    Debug.Log("UDP server connection succeeded.");
+                    hasLoggedUdpConnection = true;
+                }
+            }
+            catch (System.Exception ex)
+            {
+                if (logConnectionResult && !hasLoggedUdpConnection)
+                {
+                    Debug.LogError($"UDP server connection failed: {ex.Message}");
+                    hasLoggedUdpConnection = true;
+                }
+                return false;
+            }
+        }
+        else if (logConnectionResult && !hasLoggedUdpConnection)
+        {
+            Debug.Log("UDP server connection already established.");
+            hasLoggedUdpConnection = true;
+        }
+
+        return udpSocketManager.isConnected;
+    }
+
     private async Task SendHelloAsync()
     {
         if (isSending)
@@ -105,10 +166,26 @@ public class GameManager : MonoBehaviour
         isSending = true;
         try
         {
-            if (!await EnsureConnectedAsync())
+            var tcpReady = await EnsureConnectedAsync();
+            var udpReady = await EnsureUdpConnectedAsync();
+
+            if (!tcpReady && !udpReady)
                 return;
 
-            await tcpSocketManager.SendAsync(helloMessage);
+            Task tcpTask = Task.CompletedTask;
+            Task udpTask = Task.CompletedTask;
+
+            if (tcpReady)
+            {
+                tcpTask = tcpSocketManager.SendAsync(helloMessage);
+            }
+
+            if (udpReady)
+            {
+                udpTask = udpSocketManager.SendAsync(helloMessage);
+            }
+
+            await Task.WhenAll(tcpTask, udpTask);
         }
         finally
         {
@@ -127,6 +204,15 @@ public class GameManager : MonoBehaviour
         if (logEchoReply)
         {
             Debug.Log($"Echo reply received: {message}");
+        }
+    }
+
+    private void HandleUdpEchoReceived(string message)
+    {
+        lastUdpEchoMessage = message;
+        if (logUdpEchoReply)
+        {
+            Debug.Log($"UDP echo reply received: {message}");
         }
     }
 

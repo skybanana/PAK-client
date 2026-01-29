@@ -119,6 +119,50 @@ NavMeshSettings:
     debug:
       m_Flags: 0
   m_NavMeshData: {fileID: 0}
+--- !u!1 &25910589
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 25910591}
+  - component: {fileID: 25910590}
+  m_Layer: 0
+  m_Name: UDPSocketManager
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &25910590
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 25910589}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 85a36657633f840468902ff81a768b3f, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::UDPSocketManager
+--- !u!4 &25910591
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 25910589}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &828132413
 GameObject:
   m_ObjectHideFlags: 0
@@ -130,7 +174,7 @@ GameObject:
   - component: {fileID: 828132415}
   - component: {fileID: 828132414}
   m_Layer: 0
-  m_Name: TCPSocketManger
+  m_Name: TCPSocketManager
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -152,8 +196,8 @@ MonoBehaviour:
   port: 50051
   useTls: 0
   addressOverride: 
-  grpcWebMode: 0
-  allowInsecureCertificatesInEditor: 0
+  http2OnlyForCleartext: 1
+  skipCertificateVerificationInEditor: 0
   sequenceNumber: 1
   isConnected: 0
 --- !u!4 &828132415
@@ -176,3 +220,4 @@ SceneRoots:
   m_ObjectHideFlags: 0
   m_Roots:
   - {fileID: 828132415}
+  - {fileID: 25910591}

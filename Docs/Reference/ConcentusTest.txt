@@ -1,0 +1,178 @@
+using UnityEngine;
+using Adrenak.UniMic;
+using Concentus;
+using System;
+
+/*
+ * Simple script to test github.com/adrenak/concentus-unity in a project.
+ * 
+ * INSTRUCTIONS
+ * Add the NPM registry to your project by going to Project Settings>Package Manager
+ * The url is https://registry.npmjs.org
+ * Add com.adrenak.concentus-unity and com.adrenak.unimic to the registry scope.
+ * 
+ * Next go Window>Package Manager and:
+ * Install com.adrenak.concentus-unity. Currently the latest version is 1.0.0 and 
+ * Install com.adrenak.unimic. Currently the latest version is 3.2.2
+ * 
+ * SETTING UP
+ * Add this script to an empty scene.
+ * Make sure you have atleast one mic attached to your PC.
+ * 
+ * HOW IT WORKS
+ * At runtime, this script does the following:
+ * It starts the first mic device sending 60ms frames.
+ * Captured audio samples are resampled to resampleFrequency if needed.
+ * Resampled audio samples are encoded
+ * Encoded audio samples are decoded and played back using StreamedAudioSource
+ * which is a component in UniMic for smooth playback of discrete audio samples.
+ * 
+ * NOTES
+ * You can change resampleFrequency to any Opus supported values. Find the supported values here: https://en.wikipedia.org/wiki/Opus_(audio_format)#Bandwidth_and_sampling_rate
+ * The resampler used is SpeexResampler. Recommended quality for realtime use is 2 or 3 for performance.
+ * Encoder complexity is 3, again for performance.
+ * The parameter passed in StartRecording method is the duration of the audio frames returned by the device. 60ms is the highest supported by Opus and supposedly best for performance.
+ * Building with IL2CPP will have better performance than Mono Scripting backend
+ */
+public class ConcentusUnityTest : MonoBehaviour {
+    public int resampleFrequency = 48000;
+
+    IOpusEncoder encoder;
+    IOpusDecoder decoder;
+    IResampler resampler;
+
+    byte[] encodeBuffer = new byte[4000];
+    float[] resampleBuffer;
+    float[] decodeBuffer;
+
+    public StreamedAudioSource audioSource;
+
+    void Start() {
+        Application.targetFrameRate = 60;
+        Mic.Init();
+
+        if (Mic.AvailableDevices.Count == 0) {
+            Debug.Log("No devices");
+            return;
+        }
+
+        foreach (var d in Mic.AvailableDevices)
+            Debug.Log(d.Name);
+
+        var device = Mic.AvailableDevices[0];
+        // f is frequency, c is channel count, s is PCM float samples
+        device.OnFrameCollected += (f, c, s) => {
+            void RefreshIfNeeded() {
+                if (resampleBuffer == null || resampleBuffer.Length != resampleFrequency * device.FrameDurationMS * c / 1000)
+                    resampleBuffer = new float[resampleFrequency * device.FrameDurationMS * c / 1000];
+
+                if (decodeBuffer == null || decodeBuffer.Length != resampleFrequency * device.FrameDurationMS * c / 1000)
+                    decodeBuffer = new float[resampleFrequency * device.FrameDurationMS * c / 1000];
+
+                if (resampler == null) {
+                    resampler = ResamplerFactory.CreateResampler(device.ChannelCount, device.SamplingFrequency, resampleFrequency, 2);
+                }
+                else {
+                    resampler.GetRates(out int in_rate, out int out_rate);
+                    if (in_rate != f || device.ChannelCount != c) {
+                        resampler.Dispose();
+                        resampler = ResamplerFactory.CreateResampler(device.ChannelCount, device.SamplingFrequency, resampleFrequency, 5);
+                    }
+                }
+
+                if (encoder == null || encoder.SampleRate != resampleFrequency || encoder.NumChannels != c) {
+                    encoder?.Dispose();
+                    encoder = OpusCodecFactory.CreateEncoder(resampleFrequency, c, Concentus.Enums.OpusApplication.OPUS_APPLICATION_VOIP);
+                    encoder.Complexity = 3;
+                    encoder.Bitrate = 64000;
+                }
+
+                if (decoder == null || decoder.SampleRate != resampleFrequency || decoder.NumChannels != c) {
+                    decoder?.Dispose();
+                    decoder = OpusCodecFactory.CreateDecoder(resampleFrequency, c);
+                }
+            }
+
+            Span<float> Resample(Span<float> samples) {
+                // Calculate input and output lengths
+                int in_len = samples.Length / c; // Input samples per channel
+                int out_len = resampleFrequency * device.FrameDurationMS / 1000; // Output samples per channel
+
+                // Perform resampling into preallocated buffer
+                resampler.ProcessInterleaved(samples, ref in_len, resampleBuffer, ref out_len);
+
+                // Return only the valid portion of resampled data
+                return resampleBuffer.AsSpan(0, out_len * c); // Trim to valid samples
+            }
+
+            int Encode(Span<float> toEncode, out Span<byte> encoded) {
+                int frameSize = resampleFrequency * device.FrameDurationMS / 1000; // Samples per channel
+                int totalSamples = frameSize * c; // Total interleaved samples
+
+                if (toEncode.Length < totalSamples) {
+                    Debug.LogWarning("Insufficient samples for encoding.");
+                    encoded = Span<byte>.Empty;
+                    return 0;
+                }
+
+                // Use preallocated encodeBuffer
+                int result = encoder.Encode(toEncode.Slice(0, totalSamples), frameSize, encodeBuffer, encodeBuffer.Length);
+
+                if (result > 0) {
+                    encoded = encodeBuffer.AsSpan(0, result); // Trim to actual encoded size
+                }
+                else {
+                    Debug.LogError("Encoding failed.");
+                    encoded = Span<byte>.Empty;
+                }
+
+                return result; // Return number of bytes written or 0 on failure
+            }
+
+            int Decode(Span<byte> toDecode, out Span<float> decoded) {
+                int frameSize = resampleFrequency * device.FrameDurationMS / 1000; // Samples per channel
+                int maxSamples = frameSize * c; // Total interleaved samples
+
+                // Decode the Opus packet into preallocated buffer
+                int samplesPerChannel = decoder.Decode(toDecode, decodeBuffer, frameSize);
+
+                if (samplesPerChannel > 0) {
+                    int totalSamples = samplesPerChannel * c; // Total samples across all channels
+                    decoded = decodeBuffer.AsSpan(0, totalSamples); // Trim to valid samples
+                }
+                else {
+                    Debug.LogError("Decoding failed.");
+                    decoded = Span<float>.Empty;
+                }
+
+                return samplesPerChannel; // Return number of samples per channel or 0 on failure
+            }
+
+            RefreshIfNeeded();
+
+            string m = "Frequency: " + f;
+            m += "\nChannels: " + c;
+            m += "\nSample length: " + s.Length;
+            var toEncode = new Span<float>();
+            toEncode = s;
+
+            if(f != resampleFrequency)
+                toEncode = Resample(s);
+
+            m += "\nResampled length: " + toEncode.Length;
+            
+            var encodeResult = Encode(toEncode, out Span<byte> encoded);
+            if (encodeResult > 0) {
+                m += "\nEncoded length: " + encoded.Length;
+                m += "\nEncode ratio: " + (encoded.Length * 100f) / (toEncode.Length * 4);
+                var decodeResult = Decode(encoded, out Span<float> decoded);
+                if(decodeResult > 0) {
+                    audioSource.Feed(resampleFrequency, c, decoded.ToArray());
+                    m += "\nDecoded length: " + decoded.Length;
+                    Debug.Log(m);
+                }
+            }
+        };
+        device.StartRecording(60);
+    }
+}

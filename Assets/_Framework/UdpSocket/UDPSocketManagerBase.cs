@@ -14,8 +14,10 @@ public class UDPSocketManagerBase : MonoBehaviour
 
     public bool isConnected { get; private set; }
     public event Action<string> OnMessageReceived;
+    public event Action<byte[]> OnBytesReceived;
 
     private readonly ConcurrentQueue<string> mainThreadQueue = new ConcurrentQueue<string>();
+    private readonly ConcurrentQueue<byte[]> mainThreadBytesQueue = new ConcurrentQueue<byte[]>();
     private readonly ConcurrentQueue<string> responseQueue = new ConcurrentQueue<string>();
     private readonly SemaphoreSlim responseSignal = new SemaphoreSlim(0);
 
@@ -66,11 +68,29 @@ public class UDPSocketManagerBase : MonoBehaviour
         return await WaitForResponseAsync(cancellationToken);
     }
 
+    public virtual async Task SendBytesAsync(byte[] payload, CancellationToken cancellationToken = default)
+    {
+        EnsureConnected();
+
+        if (payload == null || payload.Length == 0)
+            return;
+
+        await client.SendAsync(payload, payload.Length);
+    }
+
     protected void PumpReceivedMessages()
     {
         while (mainThreadQueue.TryDequeue(out var message))
         {
             OnMessageReceived?.Invoke(message);
+        }
+    }
+
+    protected void PumpReceivedBytes()
+    {
+        while (mainThreadBytesQueue.TryDequeue(out var payload))
+        {
+            OnBytesReceived?.Invoke(payload);
         }
     }
 
@@ -129,6 +149,7 @@ public class UDPSocketManagerBase : MonoBehaviour
             mainThreadQueue.Enqueue(message);
             responseQueue.Enqueue(message);
             responseSignal.Release();
+            mainThreadBytesQueue.Enqueue(result.Buffer);
         }
     }
 

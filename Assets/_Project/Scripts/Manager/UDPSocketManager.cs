@@ -48,6 +48,7 @@ public class UDPSocketManager : UDPSocketManagerBase
     private void Update()
     {
         PumpReceivedMessages();
+        PumpReceivedBytes();
     }
 
     private void HandleMessageReceived(string message)

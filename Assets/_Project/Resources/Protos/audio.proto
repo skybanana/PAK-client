@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+package audio;
+
+// AudioStream 설정을 넘겨 받음.
+service AudioChennelInit {
+    // 설정을 받고 연결 성공/실패를 반환
+    rpc Audio (AudioStreamConfig) returns (Connected);
+}
+
+message AudioStreamConfig {
+  uint32 stream_id = 1;
+  uint32 sample_rate = 2; // e.g. 48000
+  uint32 channels = 3; // 1 or 2
+  uint32 frame_duration_ms = 4; // 10/20/40/60
+}
+
+message AudioPacket {
+  uint32 stream_id = 1;
+  uint32 sequence = 2;
+  uint64 timestamp = 3; // 샘플 단위 or 마이크로초 (둘 중 하나로 고정)
+  bytes  payload = 4; // opus frame bytes
+}
+
+message Connected {
+    bool connected = 1;
+}

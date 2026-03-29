@@ -27,10 +27,10 @@ public class GameManager : MonoBehaviour
         {
             tcpSocketManager.OnEchoReceived += HandleEchoReceived;
         }
-        if (udpSocketManager != null)
-        {
-            udpSocketManager.OnEchoReceived += HandleUdpEchoReceived;
-        }
+        // if (udpSocketManager != null)
+        // {
+        //     udpSocketManager.OnEchoReceived += HandleUdpEchoReceived;
+        // }
     }
 
     private void OnDisable()
